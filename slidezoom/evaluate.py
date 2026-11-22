@@ -63,7 +63,7 @@ def slide_nll(model, df: pd.DataFrame, store: SlideStore, n_tiles: int | None = 
 
 @torch.no_grad()
 def needle_eval(model, df: pd.DataFrame, store: SlideStore, fracs=NEEDLE_FRACS, n_tiles: int | None = None,
-                pointing: bool = True) -> pd.DataFrame:
+                pointing: bool = True, mode: str = "same") -> pd.DataFrame:
     """Each slide of df hosts, at every frac, one positive and one negative-control composite (donors from df).
 
     The same composites for every model (seeded by slide and frac). With n_tiles, a fixed random sample is read,
@@ -76,7 +76,7 @@ def needle_eval(model, df: pd.DataFrame, store: SlideStore, fracs=NEEDLE_FRACS, 
         for fi, frac in enumerate(fracs):
             for positive in (True, False):
                 rng = np.random.default_rng(zlib.crc32(r.file_id.encode()) * 10 + fi * 2 + int(positive))
-                donor, target, truth = needle_case(df, r, positive, rng)
+                donor, target, truth = needle_case(df, r, positive, rng, mode)
                 h = make_composite(store, r.file_id, donor, frac, rng)
                 if n_tiles and n_tiles < h.n_tiles:
                     h = h.subset(np.sort(rng.permutation(h.n_tiles)[:n_tiles]))

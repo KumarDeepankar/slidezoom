@@ -393,10 +393,13 @@ not β. These questions can be answered from almost any part of the slide; a foc
 <tr><td>1%</td><td>0.61</td><td>0.61</td><td>0.59</td><td class="new">×2.05 [1.58, 2.58]</td></tr>
 <tr><td>0.5%</td><td>0.72</td><td>0.71</td><td>0.63</td><td class="new">×2.01 [1.49, 2.70]</td></tr>
 <tr><td>0.1%</td><td>0.65</td><td>0.66</td><td>0.66</td><td>×0.80 (n.s.)</td></tr>
+<tr><th colspan="5">Cross-organ patch (easy to recognise)</th></tr>
+<tr><td>0.1%</td><td>0.72</td><td>0.74</td><td>0.77</td><td>B0 (512 tiles): 0.66</td></tr>
 </table>
 <p>A patch of another subtype is implanted into a held-out slide; chance is 50%. <b>Zoom finds the patch but the
-answer doesn't use it:</b> at 0.5–1% the zoom prior doubles the attention on the patch (β rose to 1.0–1.3), yet
-accuracy doesn't move. Recognition is the bottleneck: lung patches are at chance even at 20%.</p>"""))
+answer doesn't use it:</b> at 0.5–1% the zoom prior doubles the attention on the patch, yet accuracy doesn't
+move. With an easy cross-organ patch, reading every tile beats random sampling at 0.1%; the zoom adds nothing
+measurable on top.</p>"""))
     col3 = [
         section("Where the zoom prior works", prior_panel() + """
 <p>The usual Flamingo block (queries from words, keys and values from the slide, gated residual) plus one new term:
@@ -420,6 +423,15 @@ places.</p>"""),
 each layer's attention steers the next.</li>
 <li>GPT-2 writes the answer. Only the projection and cross-attention layers are trained (~10M parameters,
 about 12 minutes on a MacBook).</li></ol>""", card=False))
+    col3.append(section("Findings so far", """<ol>
+<li><b>The zoom makes the model look at small evidence</b> (1.6–2× more attention on a 0.5–1% patch).</li>
+<li><b>But it doesn't improve the answers</b> (same accuracy as the identical model with the zoom off).</li>
+<li><b>Reading every tile beats 512 random tiles on tiny evidence</b> (0.72–0.77 vs 0.66 at a 0.1% patch).</li>
+<li><b>On whole-slide questions, every model scores the same.</b></li>
+<li><b>The models can't recognise lung subtypes in a patch</b> (chance even at 20% of the slide).</li>
+<li><b>Picking the top regions by their average loses small evidence.</b></li>
+<li><b>The zoom has to start switched on</b> (started at 0, it never turns on for an easy patch).</li>
+</ol>""", card=False))
     cols = "".join(f'<div class="col">{"".join(c)}</div>' for c in (col1, col2, col3))
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>SlideZoom</title><style>{CSS}</style></head>
 <body><main>

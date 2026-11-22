@@ -8,6 +8,16 @@ features). It uses the same slides, labels and questions, and leaves SlideTalk u
 
 ![SlideZoom architecture](docs/slidezoom.png)
 
+## Findings so far (one seed, 41 held-out patients)
+
+1. **The zoom makes the model look at small evidence** (1.6–2× more attention on a 0.5–1% patch).
+2. **But it doesn't improve the answers** (same accuracy as the identical model with the zoom off).
+3. **Reading every tile beats reading 512 random tiles on tiny evidence** (0.72–0.77 vs 0.66 at a 0.1% patch).
+4. **On whole-slide questions, every model scores the same** (any part of the slide shows the cancer type).
+5. **The models can't recognise lung subtypes in a patch** (chance even at 20% of the slide).
+6. **Picking the top regions by their average loses small evidence** (top-k misses patches of 1% and below).
+7. **The zoom has to start switched on** (started at 0, the model never turns it on for an easy patch).
+
 ## Problem
 
 SlideTalk reads a **random 512 of ~4,000–20,000 tiles** per slide. A small tumour focus can be missing from
@@ -139,6 +149,39 @@ for zoom with β from 1, paired on identical composites (×, with 95% bootstrap 
 Caveats: one seed, 25 epochs (validation curves were still rising), a synthetic task, and attention measured at
 one token. Next: a cross-organ needle (an easy-to-recognise patch, so finding it is the hard part), longer
 training and more seeds.
+
+## Needle test, cross-organ: an easy-to-recognise patch
+
+Same test, but the patch comes from **the other organ** (e.g. lung tissue in a kidney slide), so recognising it is
+easy and finding it is the hard part. Run with `MODE=cross bash scripts/run_needle.sh`.
+
+**Accuracy (41 test patients, 82 cases per size, chance 50%)**
+
+| Patch | B0 512 tiles | B1 every tile | B2 multiscale (zoom off) | Zoom, β from 0 | **Zoom, β from 1** | Zoom β from 1, β off |
+|---|---|---|---|---|---|---|
+| 20% | 0.87 | 0.85 | 0.85 | 0.85 | 0.89 | 0.89 |
+| 5% | 0.88 | 0.89 | 0.89 | 0.88 | 0.89 | 0.91 |
+| 1% | 0.88 | 0.88 | 0.89 | 0.85 | 0.88 | 0.87 |
+| 0.5% | 0.82 | 0.84 | 0.83 | 0.80 | 0.84 | 0.82 |
+| 0.1% | 0.66 | 0.72 | 0.74 | 0.76 | **0.77** | 0.74 |
+
+**Zoom (β from 1) vs B2, paired on identical cases**
+
+| Patch | Accuracy difference | Attention on the patch |
+|---|---|---|
+| 1% | −0.01 [−0.07, +0.04] | **×1.59** [1.24, 2.04] |
+| 0.5% | +0.01 [−0.04, +0.07] | **×1.63** [1.26, 2.12] |
+| 0.1% | +0.02 [0.00, +0.06], p = 0.50 | ×0.74 [0.50, 1.07] |
+
+**In one line each**
+
+- **The task now works:** accuracy falls as the patch shrinks (0.89 at 20% → 0.66–0.77 at 0.1%).
+- **Random sampling misses tiny evidence:** at 0.1%, 512 random tiles score 0.66; zoom scores 0.77 (+11, p = 0.05).
+- **Most of that gain comes from reading every tile:** flat attention over every tile already reaches 0.72.
+- **The zoom adds no measurable accuracy:** against the same structure with the zoom off (B2), +2 points, not significant.
+- **The zoom still steers attention:** 1.6× more on 0.5–1% patches, but not on single tiles (0.1%).
+- **Top-k fails here:** choosing 2 of the regions by their average never keeps the patch, for zoom and B2 alike.
+- **The zoom must start on:** started at 0, β stayed near 0 (−0.02, 0.17, −0.06), so that model behaves like B2.
 
 ## Run
 

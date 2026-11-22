@@ -27,6 +27,7 @@ def main():
     ap.add_argument("--eval-tiles", default="all")
     ap.add_argument("--topk", default=None)
     ap.add_argument("--zero-beta", action="store_true")
+    ap.add_argument("--mode", choices=["same", "cross"], default=None, help="default: the mode it was trained with")
     args = ap.parse_args()
     ck = torch.load(args.ckpt, map_location="cpu")
     device = torch.device("cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu")
@@ -40,8 +41,9 @@ def main():
     model.set_topk(None if args.topk is None else tuple(int(k) for k in args.topk.split(",")))
     n_tiles = None if args.eval_tiles == "all" else int(args.eval_tiles)
     df = slides(args.split, ck["args"].get("fold"))
-    res = needle_eval(model, df, SlideStore(), n_tiles=n_tiles)
-    print(f"{ck['args']['mode']}  {len(df)} {args.split} hosts  tiles {args.eval_tiles}  topk {args.topk}  "
+    mode = args.mode or ck["args"].get("needle_mode", "same")
+    res = needle_eval(model, df, SlideStore(), n_tiles=n_tiles, mode=mode)
+    print(f"{ck['args']['mode']}  needle {mode}  {len(df)} {args.split} hosts  tiles {args.eval_tiles}  topk {args.topk}  "
           f"betas {['%+.2f' % b for b in model.betas()]}")
     g = res.groupby("frac", sort=False)
     out = g.agg(acc=("correct", "mean"), acc_pos=("correct", lambda c: c[res.loc[c.index, "positive"]].mean()),
@@ -49,7 +51,7 @@ def main():
                 implant_read=("implant_read", "mean"), tiles_read=("tiles_read", "mean"),
                 lift=("lift", "median"))
     print(out.to_string(float_format=lambda v: f"{v:.2f}"))
-    tag = f"{args.split}_{Path(args.ckpt).stem}_t{args.eval_tiles}_k{args.topk or 'all'}{'_beta0' if args.zero_beta else ''}".replace(",", "-")
+    tag = f"{args.split}_{Path(args.ckpt).stem}_t{args.eval_tiles}_k{args.topk or 'all'}{'_beta0' if args.zero_beta else ''}{'_cross' if mode == 'cross' else ''}".replace(",", "-")
     res.to_csv(Path(args.ckpt).resolve().parent / f"{tag}_needle.csv", index=False)
 
 

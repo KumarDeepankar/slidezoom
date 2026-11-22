@@ -158,11 +158,15 @@ def make_composite(store: SlideStore, host: str, donor: str, frac: float, rng: n
     return h
 
 
-def needle_case(df: pd.DataFrame, row, positive: bool, rng: np.random.Generator):
-    """(donor file_id, subtype asked about, answer). Positive: donor of another subtype of the same organ, asked
-    about it -> yes. Negative control: donor of the host's own subtype (a foreign patch all the same), asked about
-    another subtype of the organ -> no."""
-    others = [s for s in same_organ(row.subtype) if s != row.subtype]
+def needle_case(df: pd.DataFrame, row, positive: bool, rng: np.random.Generator, mode: str = "same"):
+    """(donor file_id, subtype asked about, answer). Positive: donor of another subtype, asked about it -> yes.
+    Negative control: donor of the host's own subtype (a foreign patch all the same), asked about another
+    subtype -> no. mode "same": the other subtype is from the same organ (hard to recognise); "cross": from the
+    other organ (easy to recognise, so finding the patch is the hard part)."""
+    if mode == "cross":
+        others = [s for s in SUBTYPE_NAMES if s not in same_organ(row.subtype)]
+    else:
+        others = [s for s in same_organ(row.subtype) if s != row.subtype]
     if positive:
         target = others[rng.integers(len(others))]
         pool = df[df.subtype == target]
@@ -174,7 +178,8 @@ def needle_case(df: pd.DataFrame, row, positive: bool, rng: np.random.Generator)
 
 
 def make_batch(rows: pd.DataFrame, store: SlideStore, n_tiles, n_questions: int, rng: random.Random,
-               np_rng: np.random.Generator, device, needle: float = 0.0, donors: pd.DataFrame | None = None):
+               np_rng: np.random.Generator, device, needle: float = 0.0, donors: pd.DataFrame | None = None,
+               needle_mode: str = "same"):
     """Slide-major batch: slide i owns questions i*Q .. i*Q+Q-1 (the model relies on this order).
 
     n_tiles: int, (low, high) for a random count per slide, or None for every tile. Coarse levels always
@@ -187,7 +192,7 @@ def make_batch(rows: pd.DataFrame, store: SlideStore, n_tiles, n_questions: int,
     for _, row in rows.iterrows():
         if needle and np_rng.random() < needle:
             frac = float(10 ** np_rng.uniform(np.log10(NEEDLE_FRACS[-1]), np.log10(NEEDLE_FRACS[0])))
-            donor, target, ans = needle_case(donors, row, bool(np_rng.random() < 0.5), np_rng)
+            donor, target, ans = needle_case(donors, row, bool(np_rng.random() < 0.5), np_rng, needle_mode)
             h = make_composite(store, row.file_id, donor, frac, np_rng)
             qa = [(q.format(s=target), ans) for q in NEEDLE_Q] + [(ASK_ORGAN[0], row.organ)]
         else:

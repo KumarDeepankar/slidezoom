@@ -49,6 +49,8 @@ def main():
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--gate-lr", type=float, default=1e-2, help="for the scalar gates and betas")
     ap.add_argument("--needle", type=float, default=0.0, help="share of slides turned into needle composites")
+    ap.add_argument("--needle-mode", choices=["same", "cross"], default="same",
+                    help="needle patch from another subtype of the same organ, or of the other organ")
     ap.add_argument("--beta-init", type=float, default=0.0, help="starting zoom strength (zoom mode)")
     ap.add_argument("--fold", type=int, default=None, help="5-fold CV; default: data/splits.csv")
     ap.add_argument("--seed", type=int, default=0)
@@ -87,7 +89,7 @@ def main():
         order = train_df.sample(frac=1, random_state=args.seed * 1000 + epoch)
         for s in range(0, len(order), args.slides_per_step):
             slide, qs, ans = make_batch(order.iloc[s:s + args.slides_per_step], store, train_tiles,
-                                        args.questions_per_slide, rng, np_rng, device, args.needle, train_df)
+                                        args.questions_per_slide, rng, np_rng, device, args.needle, train_df, args.needle_mode)
             loss = model.loss(slide, qs, ans)
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -111,7 +113,8 @@ def main():
                    val_subtype=float(acc["subtype"]), val_organ=float(acc["organ"]),
                    gates=model.gates(), betas=model.betas(), skipped_steps=skipped, seconds=round(time.time() - t0))
         if args.needle:
-            nd = needle_eval(model, val_df, store, fracs=(0.01,), n_tiles=eval_tiles, pointing=False)
+            nd = needle_eval(model, val_df, store, fracs=(0.01,), n_tiles=eval_tiles, pointing=False,
+                             mode=args.needle_mode)
             row["val_needle_1pct"] = float(nd.correct.mean())
         log.append(row)
         print(f"epoch {epoch:2d}  loss {row['loss']:.3f}  val nll {row['val_nll']:.3f}  subtype {row['val_subtype']:.2f}  "
