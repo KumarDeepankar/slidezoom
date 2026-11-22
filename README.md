@@ -60,6 +60,31 @@ Code: `slidezoom/model.py` (`ZoomCrossAttention`, `SlideZoomer._xattn`) and `sli
 Except for B0, all models train on 512–2,048 random tiles per slide per step (coarse levels always summarise
 the whole slide), and are evaluated on every tile.
 
+## Results (first run)
+
+One SlideZoom run (seed 0, 25 epochs, about 12 minutes on an M3 Pro), tested on **42 slides from patients never
+seen in training** (data/splits.csv). Best checkpoint by validation NLL (epoch 21).
+
+| Question | Every tile | Top-k 2,8 |
+|---|---|---|
+| Which organ? | 95% | 93% |
+| Which cancer subtype? (5 options, chance 20%) | 76% | 74% |
+| Yes / no, true statement | 76% | 76% |
+| Yes / no, false statement | 95% | 93% |
+| Pick between the subtypes of that organ | 81% | 81% |
+| Answer NLL per slide | 0.103 | 0.109 |
+| **Tiles scored per text token** | 4,797 (all) | **383 (8%)** |
+
+- **The model chose to zoom.** The zoom strengths ended at β = 0.07, 0.22 and 0.12 (blocks 2–4), starting from 0.
+- **Reading on a budget.** Scoring 8% of the tiles costs at most 2 points on any question.
+- **Same accuracy as SlideTalk** (95% organ, 76% subtype, 79% choice; a separate run and codebase). This is
+  expected: these questions can be answered from almost any part of the slide. The focal-evidence task in the
+  measurement plan is where zoom should help.
+- With no slide, GPT-2 gives every patient the same non-answer, so the answers come from the slide.
+
+**Caveats.** One seed and 42 test slides, so a 95% confidence interval is about ±13 points. The baselines B0–B2
+haven't been trained in this codebase yet, so there is no paired comparison yet.
+
 ## Run
 
 ```bash
@@ -67,7 +92,7 @@ the whole slide), and are evaluated on every tile.
 python -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt
 python -m pytest tests -q
 
-python scripts/train.py --mode zoom --out runs/zoom                 # ~21 min on an M3 Pro
+python scripts/train.py --mode zoom --out runs/zoom                 # ~12 min on an M3 Pro
 python scripts/test.py  --ckpt runs/zoom/best.pt                    # every tile
 python scripts/test.py  --ckpt runs/zoom/best.pt --topk 2,8         # tile budget
 python scripts/compare.py runs/flat512/test_best_t512_kall_v1 runs/zoom/test_best_tall_kall_v1

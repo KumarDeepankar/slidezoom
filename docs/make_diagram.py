@@ -312,8 +312,8 @@ def topk_panel():
     s.box(ox + 340, oy + 20, 140, 80, "≤ 8 × 64 = 512 tiles", "scored per text token,\nout of the whole slide",
           kind="trained", size=11, sub_size=9)
     s.text(ox + 500, oy + 44, "measured with --topk 2,8:", size=9.5, color="#6e6e78", anchor="start")
-    s.text(ox + 500, oy + 64, "304 of 4,858 tiles", size=13, color="#1d6b5e", anchor="start", weight=600)
-    s.text(ox + 500, oy + 82, "≈ 6% read per token", size=9.5, color="#6e6e78", anchor="start")
+    s.text(ox + 500, oy + 64, "383 of 4,797 tiles", size=13, color="#1d6b5e", anchor="start", weight=600)
+    s.text(ox + 500, oy + 82, "≈ 8% per token, test slides", size=9.5, color="#6e6e78", anchor="start")
     s.text(ox, oy + 170, "Training reads every cell (soft prior, fully differentiable). Pruning is switched on only at "
            "inference, per text token,", size=9.5, color="#3a3a40", anchor="start")
     s.text(ox, oy + 184, "so different questions can zoom into different parts of the same slide.",
@@ -374,6 +374,17 @@ arrows are the zoom prior: what each word attended to in one block biases where 
 <p>Like the gate <code>g</code>, the zoom strength <code>β</code> is one learned number per layer that starts at 0. At
 the start the model is an ordinary multi-scale Flamingo model (baseline B2), so any zooming it does is learned because
 it lowers the loss. Plotting β over training shows whether the model chooses to zoom.</p>"""),
+        section("Results on unseen patients (42 slides, first run)", """<table>
+<tr><th>Question</th><th>Every tile</th><th>Top-k 2,8</th></tr>
+<tr><td>Which organ?</td><td>95%</td><td>93%</td></tr>
+<tr><td>Which cancer subtype? (5 options, chance 20%)</td><td>76%</td><td>74%</td></tr>
+<tr><td>Yes / no about the subtype (true · false)</td><td>76% · 95%</td><td>76% · 93%</td></tr>
+<tr><td>Pick between the subtypes of that organ</td><td>81%</td><td>81%</td></tr>
+<tr><td><b>Tiles scored per text token</b></td><td>4,797 (all)</td><td class="new">383 (8%)</td></tr>
+</table>
+<p>The zoom strengths ended at <code>β = 0.07, 0.22, 0.12</code>: the model chose to zoom. Scoring 8% of the
+tiles costs at most 2 points. Accuracy matches SlideTalk, as expected for questions any part of the slide can answer.
+One seed, ±13-point confidence interval; baselines not yet trained in this codebase.</p>"""),
     ]
     col3 = [
         section("Where the zoom prior works", prior_panel() + """
@@ -397,7 +408,7 @@ places.</p>"""),
 <li>GPT-2 reads the question. Its four cross-attention layers look at regions, then sub-regions, then tiles, and
 each layer's attention steers the next.</li>
 <li>GPT-2 writes the answer. Only the projection and cross-attention layers are trained (~10M parameters,
-about 20 minutes on a MacBook).</li></ol>""", card=False))
+about 12 minutes on a MacBook).</li></ol>""", card=False))
     cols = "".join(f'<div class="col">{"".join(c)}</div>' for c in (col1, col2, col3))
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>SlideZoom</title><style>{CSS}</style></head>
 <body><main>
