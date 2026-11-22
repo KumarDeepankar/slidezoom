@@ -67,7 +67,9 @@ def slides(split: str | None = None, fold: int | None = None, n_folds: int = 5) 
     m = m.merge(pd.read_csv(ROOT / "data/splits.csv")[["file_id", "split"]], on="file_id")
     m["organ"] = m.project.map(lambda p: SUBTYPES[p][0])
     m["subtype"] = m.project.map(lambda p: SUBTYPES[p][1])
-    m = m[m.file_id.map(lambda f: (FEAT_DIR / f"{f}.h5").exists())].reset_index(drop=True)
+    m = m[m.file_id.map(lambda f: (FEAT_DIR / f"{f}.h5").exists())]
+    # TCGA barcode sample type: 01-09 tumour, 10-19 normal. The manifest has 4 normal-kidney slides labelled KICH.
+    m = m[m.file_name.str.split("-").str[3].str[:2].astype(int) < 10].reset_index(drop=True)
     if fold is not None:
         m["split"] = _fold_split(m, fold, n_folds)
     if split:
@@ -122,21 +124,83 @@ def collate(hiers: list[Hierarchy], device) -> dict:
     return out
 
 
+# ---------------------------------------------------------------------------------------------- needle task
+NEEDLE_Q = ["Is there any {s} in this slide?", "Does this slide contain {s}?", "Is a focus of {s} present anywhere?"]
+NEEDLE_FRACS = (0.2, 0.05, 0.01, 0.005, 0.001)
+
+
+def same_organ(subtype: str) -> list[str]:
+    organ = next(o for o, s in SUBTYPES.values() if s == subtype)
+    return [s for o, s in SUBTYPES.values() if o == organ]
+
+
+def _blob(grid: np.ndarray, n: int, center: int) -> np.ndarray:
+    """The n tiles nearest to `center` on the grid (a contiguous patch), ordered by distance."""
+    d = ((grid - grid[center]) ** 2).sum(1)
+    return np.argsort(d, kind="stable")[:n]
+
+
+def make_composite(store: SlideStore, host: str, donor: str, frac: float, rng: np.random.Generator) -> Hierarchy:
+    """Host slide with a contiguous patch (frac of its tiles) replaced by a contiguous patch of the donor slide.
+
+    Tiles keep their radial order around the patch centre, so the implant looks like one focus, not confetti.
+    The hierarchy is rebuilt, so regions and sub-regions summarise the composite.
+    """
+    hh, dh = store.get(host), store.get(donor)
+    feats, grid, dfeats, dgrid = hh.feats[-1], hh.grid, dh.feats[-1], dh.grid
+    n = max(1, min(round(frac * len(feats)), len(dfeats) // 2))
+    h_idx = _blob(grid, n, int(rng.integers(len(feats))))
+    d_idx = _blob(dgrid, n, int(rng.integers(len(dfeats))))
+    feats = feats.astype(np.float16).copy()
+    feats[h_idx] = dfeats[d_idx]
+    h = build_hierarchy(feats, grid, store.sizes)
+    h.implant = np.sort(h_idx)
+    return h
+
+
+def needle_case(df: pd.DataFrame, row, positive: bool, rng: np.random.Generator):
+    """(donor file_id, subtype asked about, answer). Positive: donor of another subtype of the same organ, asked
+    about it -> yes. Negative control: donor of the host's own subtype (a foreign patch all the same), asked about
+    another subtype of the organ -> no."""
+    others = [s for s in same_organ(row.subtype) if s != row.subtype]
+    if positive:
+        target = others[rng.integers(len(others))]
+        pool = df[df.subtype == target]
+    else:
+        target = others[rng.integers(len(others))]
+        pool = df[(df.subtype == row.subtype) & (df.file_id != row.file_id)]
+    donor = pool.file_id.iloc[int(rng.integers(len(pool)))]
+    return donor, target, "yes" if positive else "no"
+
+
 def make_batch(rows: pd.DataFrame, store: SlideStore, n_tiles, n_questions: int, rng: random.Random,
-               np_rng: np.random.Generator, device):
+               np_rng: np.random.Generator, device, needle: float = 0.0, donors: pd.DataFrame | None = None):
     """Slide-major batch: slide i owns questions i*Q .. i*Q+Q-1 (the model relies on this order).
 
     n_tiles: int, (low, high) for a random count per slide, or None for every tile. Coarse levels always
     summarise the whole slide; only the tile level is subsampled.
+    needle: probability that a slide becomes a composite (f log-uniform in 0.1%-20%) asked needle questions;
+    donors come from `donors` (the same split). Implanted tiles are always kept in the subsample, for positives
+    and negative controls alike, so the label stays true and cannot leak.
     """
     hiers, questions, answers = [], [], []
     for _, row in rows.iterrows():
-        h = store.get(row.file_id)
+        if needle and np_rng.random() < needle:
+            frac = float(10 ** np_rng.uniform(np.log10(NEEDLE_FRACS[-1]), np.log10(NEEDLE_FRACS[0])))
+            donor, target, ans = needle_case(donors, row, bool(np_rng.random() < 0.5), np_rng)
+            h = make_composite(store, row.file_id, donor, frac, np_rng)
+            qa = [(q.format(s=target), ans) for q in NEEDLE_Q] + [(ASK_ORGAN[0], row.organ)]
+        else:
+            h = store.get(row.file_id)
+            qa = [(q, a) for _, q, a in questions_for(row, rng)]
         n = n_tiles if (n_tiles is None or isinstance(n_tiles, int)) else int(np_rng.integers(n_tiles[0], n_tiles[1] + 1))
         if n and n < h.n_tiles:
-            h = h.subset(np.sort(np_rng.choice(h.n_tiles, n, replace=False)))
+            keep = h.implant if h.implant is not None else np.array([], dtype=np.int64)
+            rest = np.setdiff1d(np.arange(h.n_tiles), keep)
+            extra = np_rng.choice(rest, max(0, min(n - len(keep), len(rest))), replace=False)
+            h = h.subset(np.sort(np.concatenate([keep, extra])))
         hiers.append(h)
-        for _, q, a in rng.sample(questions_for(row, rng), n_questions):
+        for q, a in rng.sample(qa, n_questions):
             questions.append(q)
             answers.append(a)
     return collate(hiers, device), questions, answers

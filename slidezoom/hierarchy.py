@@ -11,6 +11,7 @@ parent[l][i] is the index, at level l-1, of the cell that contains cell i of lev
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Optional
 
 import numpy as np
 
@@ -21,6 +22,8 @@ LEVEL_SIZES = (32, 8, 1)  # tiles per side of a cell, coarse to fine; must nest 
 class Hierarchy:
     feats: list[np.ndarray]   # per level (N_l, D)
     parent: list[np.ndarray]  # per level (N_l,) index into level l-1; parent[0] is unused (zeros)
+    grid: Optional[np.ndarray] = None     # (N, 2) tile column/row
+    implant: Optional[np.ndarray] = None  # tiles replaced by a needle patch (data.make_composite), else None
 
     @property
     def n_tiles(self) -> int:
@@ -28,7 +31,11 @@ class Hierarchy:
 
     def subset(self, idx: np.ndarray) -> "Hierarchy":
         """Keep only the tiles `idx`. Coarse levels still summarise the whole slide."""
-        return Hierarchy(self.feats[:-1] + [self.feats[-1][idx]], self.parent[:-1] + [self.parent[-1][idx]])
+        imp = None
+        if self.implant is not None:  # positions of the implanted tiles inside the subset
+            imp = np.flatnonzero(np.isin(idx, self.implant))
+        return Hierarchy(self.feats[:-1] + [self.feats[-1][idx]], self.parent[:-1] + [self.parent[-1][idx]],
+                         None if self.grid is None else self.grid[idx], imp)
 
 
 def _pool(feats: np.ndarray, cell: np.ndarray) -> np.ndarray:
@@ -57,4 +64,4 @@ def build_hierarchy(feats: np.ndarray, grid: np.ndarray, sizes=LEVEL_SIZES) -> H
         p = np.zeros(len(level_feats[l]), dtype=np.int64)
         p[cells[l]] = cells[l - 1]  # nested sizes: every tile of a cell has the same coarser cell
         parent.append(p)
-    return Hierarchy(level_feats, parent)
+    return Hierarchy(level_feats, parent, grid)

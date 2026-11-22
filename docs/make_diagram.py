@@ -313,7 +313,7 @@ def topk_panel():
           kind="trained", size=11, sub_size=9)
     s.text(ox + 500, oy + 44, "measured with --topk 2,8:", size=9.5, color="#6e6e78", anchor="start")
     s.text(ox + 500, oy + 64, "383 of 4,797 tiles", size=13, color="#1d6b5e", anchor="start", weight=600)
-    s.text(ox + 500, oy + 82, "≈ 8% per token (same with β = 0)", size=9.5, color="#6e6e78", anchor="start")
+    s.text(ox + 500, oy + 82, "≈ 8% (same with β = 0)", size=9.5, color="#6e6e78", anchor="start")
     s.text(ox, oy + 170, "Training reads every cell (soft prior, fully differentiable). Pruning is switched on only at "
            "inference, per text token,", size=9.5, color="#3a3a40", anchor="start")
     s.text(ox, oy + 184, "so different questions can zoom into different parts of the same slide.",
@@ -387,6 +387,16 @@ it lowers the loss. Plotting β over training shows whether the model chooses to
 every slide. No paired difference is significant. Pruning to 8% of the tiles works, but the hierarchy does it,
 not β. These questions can be answered from almost any part of the slide; a focal-evidence task is next.</p>"""),
     ]
+    col1.append(section("Needle test: finding a small patch", """<table>
+<tr><th>Patch</th><th>B1 flat</th><th>B2 multi</th><th>Zoom β₀=1</th><th>Attention on patch, zoom ÷ β off</th></tr>
+<tr><td>20%</td><td>0.73</td><td>0.72</td><td>0.70</td><td>—</td></tr>
+<tr><td>1%</td><td>0.61</td><td>0.61</td><td>0.59</td><td class="new">×2.05 [1.58, 2.58]</td></tr>
+<tr><td>0.5%</td><td>0.72</td><td>0.71</td><td>0.63</td><td class="new">×2.01 [1.49, 2.70]</td></tr>
+<tr><td>0.1%</td><td>0.65</td><td>0.66</td><td>0.66</td><td>×0.80 (n.s.)</td></tr>
+</table>
+<p>A patch of another subtype is implanted into a held-out slide; chance is 50%. <b>Zoom finds the patch but the
+answer doesn't use it:</b> at 0.5–1% the zoom prior doubles the attention on the patch (β rose to 1.0–1.3), yet
+accuracy doesn't move. Recognition is the bottleneck: lung patches are at chance even at 20%.</p>"""))
     col3 = [
         section("Where the zoom prior works", prior_panel() + """
 <p>The usual Flamingo block (queries from words, keys and values from the slide, gated residual) plus one new term:

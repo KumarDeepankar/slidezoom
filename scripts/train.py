@@ -22,7 +22,7 @@ import torch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from slidezoom.data import SlideStore, make_batch, slides  # noqa: E402
-from slidezoom.evaluate import ask_all, slide_nll  # noqa: E402
+from slidezoom.evaluate import ask_all, needle_eval, slide_nll  # noqa: E402
 from slidezoom.model import SCHEDULES, SlideZoomer  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,6 +48,8 @@ def main():
     ap.add_argument("--weight-decay", type=float, default=0.05)
     ap.add_argument("--lr", type=float, default=3e-4)
     ap.add_argument("--gate-lr", type=float, default=1e-2, help="for the scalar gates and betas")
+    ap.add_argument("--needle", type=float, default=0.0, help="share of slides turned into needle composites")
+    ap.add_argument("--beta-init", type=float, default=0.0, help="starting zoom strength (zoom mode)")
     ap.add_argument("--fold", type=int, default=None, help="5-fold CV; default: data/splits.csv")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--log-every", type=int, default=5)
@@ -63,7 +65,7 @@ def main():
     print(f"mode {args.mode}  levels {SCHEDULES[args.mode]}  slides {len(train_df)} train / {len(val_df)} val  "
           f"device {device}")
 
-    model = SlideZoomer(args.mode, mem_dropout=args.mem_dropout).to(device)
+    model = SlideZoomer(args.mode, mem_dropout=args.mem_dropout, beta_init=args.beta_init).to(device)
     scalars = [p for n, p in model.named_parameters() if p.requires_grad and n.endswith((".gate", ".beta"))]
     ids = {id(p) for p in scalars}
     others = [p for p in model.parameters() if p.requires_grad and id(p) not in ids]
@@ -85,7 +87,7 @@ def main():
         order = train_df.sample(frac=1, random_state=args.seed * 1000 + epoch)
         for s in range(0, len(order), args.slides_per_step):
             slide, qs, ans = make_batch(order.iloc[s:s + args.slides_per_step], store, train_tiles,
-                                        args.questions_per_slide, rng, np_rng, device)
+                                        args.questions_per_slide, rng, np_rng, device, args.needle, train_df)
             loss = model.loss(slide, qs, ans)
             opt.zero_grad(set_to_none=True)
             loss.backward()
@@ -108,10 +110,14 @@ def main():
         row = dict(epoch=epoch, loss=float(np.mean(losses)), val_nll=float(nll.nll.mean()),
                    val_subtype=float(acc["subtype"]), val_organ=float(acc["organ"]),
                    gates=model.gates(), betas=model.betas(), skipped_steps=skipped, seconds=round(time.time() - t0))
+        if args.needle:
+            nd = needle_eval(model, val_df, store, fracs=(0.01,), n_tiles=eval_tiles, pointing=False)
+            row["val_needle_1pct"] = float(nd.correct.mean())
         log.append(row)
         print(f"epoch {epoch:2d}  loss {row['loss']:.3f}  val nll {row['val_nll']:.3f}  subtype {row['val_subtype']:.2f}  "
               f"organ {row['val_organ']:.2f}  gates [{' '.join(f'{g:+.2f}' for g in row['gates'])}]  "
-              f"beta [{' '.join(f'{b:+.2f}' for b in row['betas'])}]  {row['seconds']}s", flush=True)
+              f"beta [{' '.join(f'{b:+.2f}' for b in row['betas'])}]"
+              + (f"  needle@1% {row['val_needle_1pct']:.2f}" if args.needle else "") + f"  {row['seconds']}s", flush=True)
         ckpt = {"state": model.trainable_state(), "epoch": epoch, "args": vars(args)}
         if row["val_nll"] < best:
             best = row["val_nll"]

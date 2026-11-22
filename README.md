@@ -92,6 +92,54 @@ All models were trained the same way (25 epochs, about 6–15 minutes each on an
 the focal-evidence task in the measurement plan, starting β at 1 rather than 0, and more seeds / CV folds.
 Caveat: one seed and 42 test slides (±13 points on an accuracy), and B2 and SlideZoom share an initialisation.
 
+## Needle test: finding a small patch (seed 0, 41 held-out patients)
+
+Built from the existing features (`slidezoom/data.py: make_composite`). A test slide gets a contiguous patch
+from **another subtype of the same organ** covering 20% … 0.1% of its tiles, and the model is asked
+*"Is there any ⟨that subtype⟩ in this slide?"* (yes). As a control, the slide gets a patch from **another slide
+of its own subtype** and is asked about a different subtype (no). Both contain a foreign patch, so only
+recognising what is in the patch earns credit. Chance is 50%. All five models were retrained with half the slides
+turned into composites (`bash scripts/run_needle.sh`, ~1.5 h). The 4 normal-kidney slides that were labelled
+chromophobe are now excluded, so the test set has 41 patients.
+
+**Accuracy (82 composites per size, 95% CI about ±10 points)**
+
+| Patch | B0 512 tiles | B1 flat | B2 multiscale | Zoom, β from 0 | Zoom, β from 1 |
+|---|---|---|---|---|---|
+| 20% | 0.74 | 0.73 | 0.72 | 0.67 | 0.70 |
+| 5% | 0.68 | 0.71 | 0.70 | 0.67 | 0.71 |
+| 1% | 0.61 | 0.61 | 0.61 | 0.59 | 0.59 |
+| 0.5% | 0.72 | 0.72 | 0.71 | 0.71 | 0.63 |
+| 0.1% | 0.63 | 0.65 | 0.66 | 0.68 | 0.66 |
+
+**Where the attention goes.** Share of tile-level attention (last prompt token) on the patch, relative to chance,
+for zoom with β from 1, paired on identical composites (×, with 95% bootstrap CI):
+
+| Compared with | 1% patch | 0.5% patch | 0.1% patch |
+|---|---|---|---|
+| B1 flat, every tile | **×1.96** [1.42, 2.64] | ×1.29 [0.93, 1.78] | ×0.52 [0.27, 0.96] |
+| B2 multiscale | **×2.29** [1.77, 3.01] | **×1.76** [1.32, 2.34] | ×0.81 [0.40, 1.59] |
+| the same model with β switched off | **×2.05** [1.58, 2.58] | **×2.01** [1.49, 2.70] | ×0.80 [0.47, 1.27] |
+
+**What this shows**
+
+- **Zoom finds the patch, but the answer doesn't use it.** At 0.5–1% patches the zoom prior roughly doubles the
+  attention on the patch, and switching β off in the same model halves it again (higher in 89–94% of cases).
+  On this task the model kept the prior: β started at 1 and ended at 1.01, 1.21 and 1.27. Accuracy doesn't move.
+- **At 0.1% (1–5 tiles) the zoom doesn't help.** A mean over a 1,024-tile region hardly changes when one tile does,
+  so the coarse levels can't see it. Top-k pruning loses patches of 1% and smaller for the same reason.
+- **Recognising the patch is the bottleneck, not finding it.** Even 20% patches are only about 70% right, and size
+  barely matters. Split by organ (5–20% patches), kidney works (0.77 patch present / 0.85 control for B1), but **lung
+  is at chance** (0.60 / 0.53): the models can't tell adenocarcinoma from squamous in a patch, although they name
+  whole lung slides. That suggests the whole-slide answers lean on slide-wide cues; this is a hypothesis.
+- On kidney alone there is still no decline with patch size and no difference between models, and at small sizes
+  the models mostly answer "no". So no model reads small patches yet, and this version of the task can't test
+  zoom on accuracy.
+
+Caveats: one seed, 25 epochs (validation curves were still rising), a synthetic task, and attention measured at
+one token. Next: a cross-organ needle (an easy-to-recognise patch, so finding it is the hard part), longer
+training and more seeds.
+
 ## Run
 
 ```bash

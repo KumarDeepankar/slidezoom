@@ -57,7 +57,7 @@ class ZoomCrossAttention(nn.Module):
     returns x + tanh(gate) * W_o(read), and attention (S, heads, Q*T, N)
     """
 
-    def __init__(self, d: int = 768, heads: int = 12, learn_beta: bool = True):
+    def __init__(self, d: int = 768, heads: int = 12, learn_beta: bool = True, beta_init: float = 0.0):
         super().__init__()
         assert d % heads == 0
         self.h, self.dh = heads, d // heads
@@ -65,7 +65,7 @@ class ZoomCrossAttention(nn.Module):
         self.W_q, self.W_k, self.W_v, self.W_o = (nn.Linear(d, d) for _ in range(4))
         self.gate = nn.Parameter(torch.zeros(1))  # tanh(0) = 0: starts as plain GPT-2 (Flamingo)
         if learn_beta:
-            self.beta = nn.Parameter(torch.zeros(1))  # 0: starts with no zoom
+            self.beta = nn.Parameter(torch.full((1,), beta_init))  # 0: starts with no zoom
         else:
             self.register_buffer("beta", torch.zeros(1))
 
@@ -96,7 +96,8 @@ class ZoomCrossAttention(nn.Module):
 
 
 class SlideZoomer(nn.Module):
-    def __init__(self, mode: str = "zoom", lm_name: str = "gpt2", tile_dim: int = 768, mem_dropout: float = 0.0):
+    def __init__(self, mode: str = "zoom", lm_name: str = "gpt2", tile_dim: int = 768, mem_dropout: float = 0.0,
+                 beta_init: float = 0.0):
         super().__init__()
         self.mode, self.levels = mode, SCHEDULES[mode]
         self.use_prior = mode != "flat"
@@ -109,7 +110,7 @@ class SlideZoomer(nn.Module):
         self.level_emb = nn.Embedding(N_LEVELS, d)                                  # tells blocks the scale
         nn.init.normal_(self.level_emb.weight, std=0.02)
         self.mem_drop = nn.Dropout(mem_dropout)
-        self.xattn = nn.ModuleList([ZoomCrossAttention(d, heads, learn_beta=(mode == "zoom" and j > 0))
+        self.xattn = nn.ModuleList([ZoomCrossAttention(d, heads, learn_beta=(mode == "zoom" and j > 0), beta_init=beta_init)
                                     for j in range(len(XATTN_AFTER))])
         self.topk: list[int | None] = [None] * len(XATTN_AFTER)
         self.keep_attn = False  # store each block's attention (for maps); off in training
