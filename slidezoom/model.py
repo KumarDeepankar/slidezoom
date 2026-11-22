@@ -33,6 +33,19 @@ SCHEDULES = {"zoom": (0, 1, 2, 2), "multiscale": (0, 1, 2, 2), "flat": (2, 2, 2,
 N_LEVELS = 3
 
 
+class LayerNorm(nn.LayerNorm):
+    """nn.LayerNorm written with elementary ops (same parameters, same maths).
+
+    On Apple MPS (torch 2.8) the fused layer_norm backward returned a NaN bias gradient for finite inputs and
+    finite incoming gradients (reproducible at step 92 of a zoom run), and one such step turns every weight NaN.
+    """
+
+    def forward(self, x):
+        mu = x.mean(-1, keepdim=True)
+        var = (x - mu).pow(2).mean(-1, keepdim=True)
+        return (x - mu) * torch.rsqrt(var + self.eps) * self.weight + self.bias
+
+
 class ZoomCrossAttention(nn.Module):
     """Gated cross-attention whose logits can be biased by a prior over the cells it reads.
 
@@ -48,7 +61,7 @@ class ZoomCrossAttention(nn.Module):
         super().__init__()
         assert d % heads == 0
         self.h, self.dh = heads, d // heads
-        self.ln = nn.LayerNorm(d)
+        self.ln = LayerNorm(d)
         self.W_q, self.W_k, self.W_v, self.W_o = (nn.Linear(d, d) for _ in range(4))
         self.gate = nn.Parameter(torch.zeros(1))  # tanh(0) = 0: starts as plain GPT-2 (Flamingo)
         if learn_beta:
@@ -92,7 +105,7 @@ class SlideZoomer(nn.Module):
         self.lm = GPT2LMHeadModel.from_pretrained(lm_name)
         self.lm.requires_grad_(False)
         d, heads = self.lm.config.n_embd, self.lm.config.n_head
-        self.proj = nn.Sequential(nn.LayerNorm(tile_dim), nn.Linear(tile_dim, d))  # tile space -> word space
+        self.proj = nn.Sequential(LayerNorm(tile_dim), nn.Linear(tile_dim, d))  # tile space -> word space
         self.level_emb = nn.Embedding(N_LEVELS, d)                                  # tells blocks the scale
         nn.init.normal_(self.level_emb.weight, std=0.02)
         self.mem_drop = nn.Dropout(mem_dropout)

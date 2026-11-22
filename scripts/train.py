@@ -78,7 +78,7 @@ def main():
 
     store = SlideStore()
     OUT.mkdir(parents=True, exist_ok=True)
-    log, best = [], float("inf")
+    log, best, skipped = [], float("inf"), 0
     for epoch in range(1, args.epochs + 1):
         model.train()
         t0, losses = time.time(), []
@@ -89,6 +89,12 @@ def main():
             loss = model.loss(slide, qs, ans)
             opt.zero_grad(set_to_none=True)
             loss.backward()
+            grads = [p.grad for p in others + scalars if p.grad is not None]
+            if not torch.isfinite(loss) or not all(torch.isfinite(g).all() for g in grads):
+                skipped += 1  # one bad step would turn every weight into NaN; drop it instead
+                print(f"  epoch {epoch:2d}  skipped a step with a non-finite loss or gradient ({skipped} so far)")
+                sched.step()
+                continue
             torch.nn.utils.clip_grad_norm_(others, 1.0)
             opt.step()
             sched.step()
@@ -101,7 +107,7 @@ def main():
         acc = ask_all(model, val_df, store, kinds=("subtype", "organ"), n_tiles=eval_tiles).groupby("kind").correct.mean()
         row = dict(epoch=epoch, loss=float(np.mean(losses)), val_nll=float(nll.nll.mean()),
                    val_subtype=float(acc["subtype"]), val_organ=float(acc["organ"]),
-                   gates=model.gates(), betas=model.betas(), seconds=round(time.time() - t0))
+                   gates=model.gates(), betas=model.betas(), skipped_steps=skipped, seconds=round(time.time() - t0))
         log.append(row)
         print(f"epoch {epoch:2d}  loss {row['loss']:.3f}  val nll {row['val_nll']:.3f}  subtype {row['val_subtype']:.2f}  "
               f"organ {row['val_organ']:.2f}  gates [{' '.join(f'{g:+.2f}' for g in row['gates'])}]  "
