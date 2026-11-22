@@ -191,42 +191,75 @@ def end_to_end():
 
 # ---------------------------------------------------------------------------------------------- 3
 def hierarchy_panel():
-    s = Svg(640, 270)
-    cols, rows, px = 64, 40, 4.4
+    """The same toy slide at the three levels, each coarse cell filled with the mean colour of its tiles."""
+    s = Svg(640, 250)
+    cols, rows = 64, 40
+    W, gap = 186, 41
+    px = W / cols
     yy, xx = np.mgrid[0:rows, 0:cols]
-    tissue = (((xx - 20) / 17) ** 2 + ((yy - 20) / 15) ** 2 < 1) | (((xx - 46) / 14) ** 2 + ((yy - 17) / 12) ** 2 < 1)
-    ox, oy = 10, 26
-    rng = np.random.default_rng(1)
-    pal = ["#d98cb3", "#c77dab", "#a77bc9", "#e3a6c8", "#b98ad0"]
-    for r in range(rows):
-        for c in range(cols):
-            if tissue[r, c]:
-                s.raw(f'<rect x="{ox + c * px:.1f}" y="{oy + r * px:.1f}" width="{px - .6:.1f}" height="{px - .6:.1f}" '
-                      f'fill="{pal[rng.integers(5)]}"/>')
-    for size, color, w in ((8, "#2e8b7a", 0.8), (32, "#7c5cd6", 2.2)):
+    tissue = (((xx - 20) / 17) ** 2 + ((yy - 21) / 15) ** 2 < 1) | (((xx - 46) / 14) ** 2 + ((yy - 17) / 12) ** 2 < 1)
+    pink, lilac, dark = np.array([236, 170, 205]), np.array([176, 140, 214]), np.array([96, 52, 150])
+    t = np.clip(xx / cols + 0.25 * np.sin(yy / 6), 0, 1)[..., None]
+    col = pink * (1 - t) + lilac * t
+    focus = np.exp(-(((xx - 44) ** 2 + (yy - 12) ** 2) / 14.0))[..., None]  # a small dark focus
+    col = col * (1 - focus) + dark * focus
+    col = np.clip(col + np.random.default_rng(3).normal(0, 9, col.shape), 0, 255)
+
+    def cell_means(size):
+        out = np.zeros_like(col)
         for r0 in range(0, rows, size):
             for c0 in range(0, cols, size):
-                if tissue[r0:r0 + size, c0:c0 + size].any():
-                    s.raw(f'<rect x="{ox + c0 * px}" y="{oy + r0 * px}" width="{min(size, cols - c0) * px}" '
-                          f'height="{min(size, rows - r0) * px}" fill="none" stroke="{color}" stroke-width="{w}"/>')
-    s.text(ox + cols * px / 2, 16, "tile grid of one slide (each square = one 128 µm tile)", size=9, color="#6e6e78")
-    n_reg = sum(tissue[r:r + 32, c:c + 32].any() for r in range(0, rows, 32) for c in range(0, cols, 32))
-    n_sub = sum(tissue[r:r + 8, c:c + 8].any() for r in range(0, rows, 8) for c in range(0, cols, 8))
-    n_tile = int(tissue.sum())
-    x0 = 320
-    levels = [("Level 0 · regions", f"32 × 32 tiles (~4 mm) · here {n_reg}", "#7c5cd6", "zoom", 4),
-              ("Level 1 · sub-regions", f"8 × 8 tiles (~1 mm) · here {n_sub}", "#2e8b7a", "trained", 14),
-              ("Level 2 · tiles", f"the Phikon vectors · here {n_tile}", "#a77bc9", "plain", 30)]
-    for i, (t, sub, col, kind, n) in enumerate(levels):
-        y = 30 + i * 74
-        s.box(x0, y, 150, 44, t, sub, kind=kind, size=10.5, sub_size=8.3)
-        for j in range(n):
-            s.raw(f'<rect x="{x0 + 165 + j * 4.6:.1f}" y="{y + 8}" width="3.6" height="28" fill="{col}" '
-                  f'fill-opacity="{0.9 if i == 0 else 0.6}"/>')
-        s.text(x0 + 165, y + 54, ["one token per region", "one token per sub-region", "one token per tile"][i],
-               size=8.5, color="#6e6e78", anchor="start")
-    s.text(x0 + 75, 252, "coarse tokens = mean of their tiles; parent[l] links each cell to the one above",
-           size=8.5, color="#6e6e78")
+                m = tissue[r0:r0 + size, c0:c0 + size]
+                if m.any():
+                    out[r0:r0 + size, c0:c0 + size] = col[r0:r0 + size, c0:c0 + size][m].mean(0)
+        return out
+
+    def count(size):
+        return sum(tissue[r:r + size, c:c + size].any() for r in range(0, rows, size) for c in range(0, cols, size))
+
+    top = 52
+    reg, sub = (32, 0, 32, 32), (40, 8, 8, 8)  # highlighted region and sub-region: (col, row, w, h) in tiles
+    panels = [(32, "Level 0 · regions", "4 mm · average of its tiles", "#7c5cd6"),
+              (8, "Level 1 · sub-regions", "1 mm · average of its tiles", "#2e8b7a"),
+              (1, "Level 2 · tiles", "128 µm · one Phikon vector each", "#6e6e78")]
+    for k, (size, title, sub_t, color) in enumerate(panels):
+        ox = k * (W + gap)
+        fill = col if size == 1 else cell_means(size)
+        for r in range(rows):
+            for c in range(cols):
+                if tissue[r, c]:
+                    rgb = ",".join(str(int(v)) for v in fill[r, c])
+                    s.raw(f'<rect x="{ox + c * px:.2f}" y="{top + r * px:.2f}" width="{px + .05:.2f}" height="{px + .05:.2f}" fill="rgb({rgb})"/>')
+        if size > 1:  # cell borders, only where there is tissue
+            for r0 in range(0, rows, size):
+                for c0 in range(0, cols, size):
+                    if tissue[r0:r0 + size, c0:c0 + size].any():
+                        s.raw(f'<rect x="{ox + c0 * px:.2f}" y="{top + r0 * px:.2f}" width="{min(size, cols - c0) * px:.2f}" '
+                              f'height="{min(size, rows - r0) * px:.2f}" fill="none" stroke="#fff" stroke-width="1.2"/>')
+        s.text(ox + W / 2, 16, title, size=11, color=STYLE["zoom"][3] if k == 0 else STYLE["trained"][3] if k == 1 else "#1d1d1f", weight=600)
+        s.text(ox + W / 2, 30, sub_t, size=9, color="#6e6e78")
+        n = count(size) if size > 1 else int(tissue.sum())
+        s.text(ox + W / 2, top + rows * px + 24, f"{n:,} tokens", size=12, color="#1d1d1f", weight=600)
+
+        def outline(box, stroke, w, dash=None):
+            c0, r0, bw, bh = box
+            bh = min(bh, rows - r0)
+            d = f' stroke-dasharray="{dash}"' if dash else ""
+            s.raw(f'<rect x="{ox + c0 * px:.2f}" y="{top + r0 * px:.2f}" width="{bw * px:.2f}" height="{bh * px:.2f}" '
+                  f'fill="none" stroke="{stroke}" stroke-width="{w}"{d}/>')
+        if k == 0:
+            outline(reg, "#7c5cd6", 2.4)
+        if k == 1:
+            outline(reg, "#7c5cd6", 1.6, "4 3")
+            outline(sub, "#2e8b7a", 2.4)
+        if k == 2:
+            outline(sub, "#2e8b7a", 2.0)
+        if k < 2:
+            ay = top + rows * px / 2
+            s.line([(ox + W + 6, ay), (ox + W + gap - 6, ay)], color="purple")
+            s.text(ox + W + gap / 2, ay - 6, "zoom in", size=8.5, color="#4f35a8")
+    s.text(320, 228, "Outlines: one zoom path. The model picks a region (purple), then a sub-region inside it (green), "
+           "then reads its 64 tiles.", size=9.5, color="#3a3a40")
     return s.render()
 
 
@@ -361,9 +394,9 @@ def page():
     col1 = [
         section("Architecture", architecture() + legend),
         section("From tiles to a hierarchy", hierarchy_panel() + """
-<p>Built from the tile grid saved with the features, so no new feature extraction is needed. Purple boxes are regions,
-green boxes are sub-regions. During training only the tile level is subsampled (512–2,048 per slide);
-regions and sub-regions always summarise the <i>whole</i> slide.</p>"""),
+<p>The same slide at three levels. A region or sub-region token is simply the <b>average of the tiles inside
+it</b>, so every level covers the whole slide, just in less detail: few tokens to scan, many to read closely. Built
+from the tile positions saved with the features, so no new feature extraction is needed.</p>"""),
     ]
     col2 = [
         section("End to end", end_to_end() + """
