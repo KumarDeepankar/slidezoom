@@ -136,9 +136,9 @@ def end_to_end():
         if i:
             s.line([(110, y - 12), (110, y - 2)])
         y += 50
-    mems = [("Region memory", "R × 768 · 32×32 tiles (~4 mm) · R ≈ 10–30"),
-            ("Sub-region memory", "S × 768 · 8×8 tiles (~1 mm) · S ≈ 100–300"),
-            ("Tile memory", "N × 768 · every tile · N ≈ 4,000")]
+    mems = [("Region memory → K, V", "R × 768 (R ≈ 10–30, 4 mm) · read by layer 1"),
+            ("Sub-region memory → K, V", "S × 768 (S ≈ 100–300, 1 mm) · read by layer 2"),
+            ("Tile memory → K, V", "N × 768 (N ≈ 4,000 tiles) · read by layers 3, 4")]
     mem_y = [300, 352, 404]
     s.line([(110, y - 12), (110, 298)])
     s.text(116, y + 2, "once per question", size=8.5, color="#6e6e78", anchor="start")
@@ -413,7 +413,8 @@ from the tile positions saved with the features, so no new feature extraction is
 arrows are the zoom prior: what each word attended to in one block biases where it looks in the next.
 <br><b>Shapes:</b> T = word pieces in the prompt (~15), R = regions (~10–30), S = sub-regions (~100–300),
 N = tiles (~4,000); 768 = the width of every token, from Phikon and GPT-2 alike.
-<b>Q</b> (queries) come from the words, <b>K</b> and <b>V</b> (keys and values) from the slide memory.</p>"""),
+<b>Q</b> (queries) come from the words; <b>K</b> and <b>V</b> (keys and values) come from the slide memory, through
+each layer's own W_k and W_v.</p>"""),
         section("Why β starts at 0", beta_panel() + """
 <p>Like the gate <code>g</code>, the zoom strength <code>β</code> is one learned number per layer that starts at 0. At
 the start the model is an ordinary multi-scale Flamingo model (baseline B2), so any zooming it does is learned because
