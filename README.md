@@ -60,30 +60,37 @@ Code: `slidezoom/model.py` (`ZoomCrossAttention`, `SlideZoomer._xattn`) and `sli
 Except for B0, all models train on 512–2,048 random tiles per slide per step (coarse levels always summarise
 the whole slide), and are evaluated on every tile.
 
-## Results (first run)
+## Results (seed 0, 42 held-out patients)
 
-One SlideZoom run (seed 0, 25 epochs, about 12 minutes on an M3 Pro), tested on **42 slides from patients never
-seen in training** (data/splits.csv). Best checkpoint by validation NLL (epoch 21).
+All models were trained the same way (25 epochs, about 6–15 minutes each on an M3 Pro) and tested on the same
+42 patients. `bash scripts/run_baselines.sh` reproduces the table; `scripts/compare.py` gives the paired tests.
 
-| Question | Every tile | Top-k 2,8 |
-|---|---|---|
-| Which organ? | 95% | 93% |
-| Which cancer subtype? (5 options, chance 20%) | 76% | 74% |
-| Yes / no, true statement | 76% | 76% |
-| Yes / no, false statement | 95% | 93% |
-| Pick between the subtypes of that organ | 81% | 81% |
-| Answer NLL per slide | 0.103 | 0.109 |
-| **Tiles scored per text token** | 4,797 (all) | **383 (8%)** |
+| Model | Organ | Subtype | Choice | Yes/no (true / false) | Test NLL | Tiles scored per token |
+|---|---|---|---|---|---|---|
+| B0 flat, 512 random tiles | 93% | 74% | 81% | 76 / 93% | 0.098 | 512 |
+| B1 flat, all tiles | 98% | 76% | 81% | 79 / 93% | 0.089 | 4,797 |
+| B2 multiscale, β = 0 | 95% | 76% | 81% | 76 / 95% | 0.104 | 4,797 |
+| SlideZoom | 95% | 76% | 81% | 76 / 95% | 0.103 | 4,797 |
+| SlideZoom with β forced to 0 at test time | 95% | 76% | 81% | 76 / 95% | 0.104 | 4,797 |
+| B2, top-k 2,8 | 93% | 74% | 81% | 76 / 93% | 0.110 | 383 |
+| SlideZoom, top-k 2,8 | 93% | 74% | 81% | 76 / 93% | 0.109 | 383 |
 
-- **The model chose to zoom.** The zoom strengths ended at β = 0.07, 0.22 and 0.12 (blocks 2–4), starting from 0.
-- **Reading on a budget.** Scoring 8% of the tiles costs at most 2 points on any question.
-- **Same accuracy as SlideTalk** (95% organ, 76% subtype, 79% choice; a separate run and codebase). This is
-  expected: these questions can be answered from almost any part of the slide. The focal-evidence task in the
-  measurement plan is where zoom should help.
-- With no slide, GPT-2 gives every patient the same non-answer, so the answers come from the slide.
+**What this shows**
 
-**Caveats.** One seed and 42 test slides, so a 95% confidence interval is about ±13 points. The baselines B0–B2
-haven't been trained in this codebase yet, so there is no paired comparison yet.
+- **The learned zoom prior has no effect on these questions.** Setting β to 0 in the trained model changes no
+  answer on any slide (NLL difference −0.001). B2, which never learns β, gives the same answers as SlideZoom on
+  every slide, with and without top-k. β grew only to 0.07–0.22, too small to move the attention.
+- **No model is significantly better than another.** Every paired McNemar p is 1.0 and every 95% CI includes 0.
+  B1 has the lowest NLL, but its CI against SlideZoom is [−0.002, +0.039].
+- **Reading a whole slide on a budget works, but the hierarchy does it, not β.** B2 and SlideZoom both keep
+  their accuracy (at most 2 points lost) while scoring 8% of the tiles, because pruning follows the previous
+  block's attention.
+- **These questions can't separate the models.** All four train to the same validation ceiling (NLL
+  0.037–0.039), because the cancer type is visible almost anywhere on the slide.
+
+**So the main question, whether zooming helps when the evidence is small and local, is still untested.** Next:
+the focal-evidence task in the measurement plan, starting β at 1 rather than 0, and more seeds / CV folds.
+Caveat: one seed and 42 test slides (±13 points on an accuracy), and B2 and SlideZoom share an initialisation.
 
 ## Run
 

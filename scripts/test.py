@@ -26,6 +26,7 @@ def main():
     ap.add_argument("--eval-tiles", default="all", help="n or all")
     ap.add_argument("--topk", default=None, help="k per zoom-in step, e.g. 2,8 (zoom / multiscale only)")
     ap.add_argument("--votes", type=int, default=1)
+    ap.add_argument("--zero-beta", action="store_true", help="ablation: switch the learned zoom prior off")
     args = ap.parse_args()
     ck = torch.load(args.ckpt, map_location="cpu")
     targs = ck["args"]
@@ -33,6 +34,10 @@ def main():
     model = SlideZoomer(targs["mode"]).to(device)
     model.load_trainable(ck["state"])
     model.eval()
+    if args.zero_beta:
+        with torch.no_grad():
+            for b in model.xattn:
+                b.beta.zero_()
     model.set_topk(None if args.topk is None else tuple(int(k) for k in args.topk.split(",")))
     n_tiles = None if args.eval_tiles == "all" else int(args.eval_tiles)
     df = slides(args.split, targs.get("fold"))
@@ -51,7 +56,7 @@ def main():
     print(f"   no slide control: '{ASK_SUBTYPE[0]}' -> '{blind}'")
 
     OUT = Path(args.ckpt).resolve().parent
-    tag = f"{args.split}_{Path(args.ckpt).stem}_t{args.eval_tiles}_k{args.topk or 'all'}_v{args.votes}".replace(",", "-")
+    tag = f"{args.split}_{Path(args.ckpt).stem}_t{args.eval_tiles}_k{args.topk or 'all'}_v{args.votes}{'_beta0' if args.zero_beta else ''}".replace(",", "-")
     res.to_csv(OUT / f"{tag}_answers.csv", index=False)
     nll.to_csv(OUT / f"{tag}_nll.csv", index=False)
     (OUT / f"{tag}_results.json").write_text(json.dumps(dict(

@@ -313,7 +313,7 @@ def topk_panel():
           kind="trained", size=11, sub_size=9)
     s.text(ox + 500, oy + 44, "measured with --topk 2,8:", size=9.5, color="#6e6e78", anchor="start")
     s.text(ox + 500, oy + 64, "383 of 4,797 tiles", size=13, color="#1d6b5e", anchor="start", weight=600)
-    s.text(ox + 500, oy + 82, "≈ 8% per token, test slides", size=9.5, color="#6e6e78", anchor="start")
+    s.text(ox + 500, oy + 82, "≈ 8% per token (same with β = 0)", size=9.5, color="#6e6e78", anchor="start")
     s.text(ox, oy + 170, "Training reads every cell (soft prior, fully differentiable). Pruning is switched on only at "
            "inference, per text token,", size=9.5, color="#3a3a40", anchor="start")
     s.text(ox, oy + 184, "so different questions can zoom into different parts of the same slide.",
@@ -373,18 +373,19 @@ arrows are the zoom prior: what each word attended to in one block biases where 
         section("Why β starts at 0", beta_panel() + """
 <p>Like the gate <code>g</code>, the zoom strength <code>β</code> is one learned number per layer that starts at 0. At
 the start the model is an ordinary multi-scale Flamingo model (baseline B2), so any zooming it does is learned because
-it lowers the loss. Plotting β over training shows whether the model chooses to zoom.</p>"""),
-        section("Results on unseen patients (42 slides, first run)", """<table>
-<tr><th>Question</th><th>Every tile</th><th>Top-k 2,8</th></tr>
-<tr><td>Which organ?</td><td>95%</td><td>93%</td></tr>
-<tr><td>Which cancer subtype? (5 options, chance 20%)</td><td>76%</td><td>74%</td></tr>
-<tr><td>Yes / no about the subtype (true · false)</td><td>76% · 95%</td><td>76% · 93%</td></tr>
-<tr><td>Pick between the subtypes of that organ</td><td>81%</td><td>81%</td></tr>
-<tr><td><b>Tiles scored per text token</b></td><td>4,797 (all)</td><td class="new">383 (8%)</td></tr>
+it lowers the loss. Plotting β over training shows whether the model chooses to zoom; in the first runs it stayed below 0.25."""),
+        section("Results on unseen patients (42 slides, seed 0)", """<table>
+<tr><th>Model</th><th>Organ</th><th>Subtype</th><th>Test NLL</th><th>Tiles / token</th></tr>
+<tr><td>B0 flat, 512 random tiles</td><td>93%</td><td>74%</td><td>0.098</td><td>512</td></tr>
+<tr><td>B1 flat, all tiles</td><td>98%</td><td>76%</td><td>0.089</td><td>4,797</td></tr>
+<tr><td>B2 multiscale, β = 0</td><td>95%</td><td>76%</td><td>0.104</td><td>4,797</td></tr>
+<tr><td class="new">SlideZoom</td><td>95%</td><td>76%</td><td>0.103</td><td>4,797</td></tr>
+<tr><td>SlideZoom, β forced to 0</td><td>95%</td><td>76%</td><td>0.104</td><td>4,797</td></tr>
+<tr><td>B2 / SlideZoom, top-k 2,8</td><td>93%</td><td>74%</td><td>0.110 / 0.109</td><td class="new">383 (8%)</td></tr>
 </table>
-<p>The zoom strengths ended at <code>β = 0.07, 0.22, 0.12</code>: the model chose to zoom. Scoring 8% of the
-tiles costs at most 2 points. Accuracy matches SlideTalk, as expected for questions any part of the slide can answer.
-One seed, ±13-point confidence interval; baselines not yet trained in this codebase.</p>"""),
+<p><b>The learned zoom prior has no effect here:</b> with β set to 0 no answer changes, and B2 matches SlideZoom on
+every slide. No paired difference is significant. Pruning to 8% of the tiles works, but the hierarchy does it,
+not β. These questions can be answered from almost any part of the slide; a focal-evidence task is next.</p>"""),
     ]
     col3 = [
         section("Where the zoom prior works", prior_panel() + """
