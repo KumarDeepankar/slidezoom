@@ -93,7 +93,7 @@ def architecture():
     s.box(400, 100, 130, 46, "Projection", "768×768 · E_lvl 3×768", kind="trained")
     s.line([(465, 66), (465, 98)])
     s.line([(465, 146), (465, 208)], color="teal")
-    s.text(472, 168, "3 slide memories:", size=9, color="#1d6b5e", anchor="start")
+    s.text(472, 168, "3 slide memories → keys K, values V:", size=9, color="#1d6b5e", anchor="start")
     s.text(472, 180, "R × 768 · S × 768 · N × 768", size=9, color="#1d6b5e", anchor="start")
     s.box(10, 212, 130, 56, "Question", '"Is there tumour?"', kind="text")
     s.box(385, 210, 160, 62, "", kind="frozen")
@@ -101,7 +101,7 @@ def architecture():
     s.box(395, 238, 140, 24, "4 zoom cross-attn layers", kind="zoom", size=9.5)
     s.box(570, 212, 65, 56, "Answer", '"yes"\nT × 50,257', kind="text")
     s.line([(142, 240), (383, 240)])
-    s.text(262, 233, "T words × 768", size=9, color="#6e6e78")
+    s.text(262, 233, "T words × 768 → queries Q", size=9, color="#4f35a8")
     s.line([(547, 240), (568, 240)])
     s.raw('<line x1="10" y1="292" x2="630" y2="292" stroke="#e3e3e8"/>')
     s.text(10, 315, "Trained matrices", size=12, color="#1d1d1f", anchor="start", weight=600)
@@ -174,6 +174,8 @@ def end_to_end():
         my = mem_y[m] + 20
         ry = ys[r][0] + ys[r][1] / 2
         s.line([(210, my), (x, my), (x, ry), (293, ry)], color="teal")
+        s.text(282, ry - 4, "K, V", size=8, color="#1d6b5e", weight=600)
+        s.text(441, ys[r][0] - 2, "Q (text)", size=8, color="#4f35a8", anchor="start", weight=600)
     # zoom prior between consecutive cross-attention blocks
     for a, b in zip(zoom_rows, zoom_rows[1:]):
         ya, yb = ys[a][0] + 12, ys[b][0] + 12
@@ -283,6 +285,12 @@ def prior_panel():
     s.box(230, 130, 130, 40, "Scores", "q · kᵀ / √d · T × N_fine", kind="plain", size=10, sub_size=8.5)
     s.line([(190, 118), (210, 118), (210, 142), (228, 142)])
     s.line([(190, 180), (210, 180), (210, 158), (228, 158)])
+    s.text(200, 113, "Q", size=10, color="#4f35a8", weight=700)
+    s.text(200, 176, "K", size=10, color="#1d6b5e", weight=700)
+    s.text(200, 215, "V", size=10, color="#1d6b5e", weight=700)
+    s.text(150, 98, "queries: what each word looks for", size=8, color="#6e6e78", anchor="start")
+    s.text(10, 252, "keys: what each cell contains", size=8, color="#6e6e78", anchor="start")
+    s.text(10, 263, "values: what each cell hands over", size=8, color="#6e6e78", anchor="start")
     s.raw('<circle cx="515" cy="150" r="11" fill="#fff" stroke="#7c5cd6" stroke-width="1.4"/>')
     s.text(515, 154, "+", size=13, color="#4f35a8", weight=600)
     s.line([(360, 150), (502, 150)])
@@ -404,7 +412,8 @@ from the tile positions saved with the features, so no new feature extraction is
 <b>sub-regions</b>, the last two read <b>tiles</b>, so magnification follows GPT-2's depth. The <span class="new">purple</span>
 arrows are the zoom prior: what each word attended to in one block biases where it looks in the next.
 <br><b>Shapes:</b> T = word pieces in the prompt (~15), R = regions (~10–30), S = sub-regions (~100–300),
-N = tiles (~4,000); 768 = the width of every token, from Phikon and GPT-2 alike.</p>"""),
+N = tiles (~4,000); 768 = the width of every token, from Phikon and GPT-2 alike.
+<b>Q</b> (queries) come from the words, <b>K</b> and <b>V</b> (keys and values) from the slide memory.</p>"""),
         section("Why β starts at 0", beta_panel() + """
 <p>Like the gate <code>g</code>, the zoom strength <code>β</code> is one learned number per layer that starts at 0. At
 the start the model is an ordinary multi-scale Flamingo model (baseline B2), so any zooming it does is learned because
