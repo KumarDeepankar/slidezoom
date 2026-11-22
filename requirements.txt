@@ -1,0 +1,12 @@
+torch==2.8.0
+torchvision==0.23.0
+transformers==5.23.0
+numpy==2.4.6
+pandas==3.1.1
+h5py==3.16.0
+openslide-python==1.4.7
+openslide-bin==4.0.1.2
+opencv-python-headless==5.0.0.93
+pillow==13.0.0
+requests==2.34.2
+pytest==9.2.0

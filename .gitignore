@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.DS_Store
+
+# outputs and downloaded data (rebuilt by the scripts)
+runs/
+data/*
+!data/manifest.csv
+!data/splits.csv
