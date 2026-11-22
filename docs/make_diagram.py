@@ -84,22 +84,22 @@ def matrix(s: Svg, x, y, name, note, kind="trained", circle=False):
 # ---------------------------------------------------------------------------------------------- 1
 def architecture():
     s = Svg(640, 430)
-    s.box(10, 20, 105, 46, "Whole slide", "H&E · ~100,000 px")
-    s.box(140, 20, 105, 46, "Tile encoder", "Phikon · tile → 768", kind="frozen")
-    s.box(270, 20, 105, 46, "Tile vectors", "all N tiles × 768")
-    s.box(400, 20, 130, 46, "Hierarchy", "regions · sub-regions · tiles", kind="zoom")
+    s.box(10, 20, 105, 46, "Whole slide", "~100,000 × 80,000 px")
+    s.box(140, 20, 105, 46, "Tile encoder", "224×224×3 → 768", kind="frozen")
+    s.box(270, 20, 105, 46, "Tile vectors", "N × 768 (N ≈ 4,000)")
+    s.box(400, 20, 130, 46, "Hierarchy", "R × 768 · S × 768 · N × 768", kind="zoom")
     for x in (115, 245, 375):
         s.line([(x + 2, 43), (x + 23, 43)])
-    s.box(400, 100, 130, 46, "Projection", "W_proj + level embedding", kind="trained")
+    s.box(400, 100, 130, 46, "Projection", "768×768 · E_lvl 3×768", kind="trained")
     s.line([(465, 66), (465, 98)])
     s.line([(465, 146), (465, 208)], color="teal")
     s.text(472, 168, "3 slide memories:", size=9, color="#1d6b5e", anchor="start")
-    s.text(472, 180, "regions · sub-regions · tiles", size=9, color="#1d6b5e", anchor="start")
+    s.text(472, 180, "R × 768 · S × 768 · N × 768", size=9, color="#1d6b5e", anchor="start")
     s.box(10, 212, 130, 56, "Question", '"Is there tumour?"', kind="text")
     s.box(385, 210, 160, 62, "", kind="frozen")
     s.text(465, 229, "GPT-2 · frozen", size=12, color="#1d1d1f", weight=600)
     s.box(395, 238, 140, 24, "4 zoom cross-attn layers", kind="zoom", size=9.5)
-    s.box(570, 212, 65, 56, "Answer", '"yes"', kind="text")
+    s.box(570, 212, 65, 56, "Answer", '"yes"\nT × 50,257', kind="text")
     s.line([(142, 240), (383, 240)])
     s.text(262, 233, "T words × 768", size=9, color="#6e6e78")
     s.line([(547, 240), (568, 240)])
@@ -122,14 +122,14 @@ def architecture():
 
 # ---------------------------------------------------------------------------------------------- 2
 def end_to_end():
-    s = Svg(640, 470)
+    s = Svg(640, 560)
     s.text(110, 14, "SLIDE · ONCE PER SLIDE", size=8.5, color="#8a8a94")
     s.text(435, 14, "GPT-2 · 12 BLOCKS, FROZEN", size=8.5, color="#8a8a94")
-    left = [("Whole slide", "H&E · ~100,000 px wide", "plain"),
-            ("Tissue tiles", "~4,000 tiles of 256 px (128 µm)", "plain"),
-            ("Phikon ViT · frozen", "each tile → 768 numbers, saved to disk", "frozen"),
-            ("Build hierarchy", "group tiles by grid · mean-pool", "zoom"),
-            ("Projection W_proj + E_lvl", "768 × 768 · trained", "trained")]
+    left = [("Whole slide", "H&E · ~100,000 × 80,000 px", "plain"),
+            ("Tissue tiles", "N ≈ 4,000 tiles · each 256 × 256 × 3 (128 µm)", "plain"),
+            ("Phikon ViT · frozen", "224 × 224 × 3 → 768 per tile · N × 768 on disk", "frozen"),
+            ("Build hierarchy", "N × 768 → R × 768, S × 768 (mean-pool)", "zoom"),
+            ("Projection W_proj + E_lvl", "W_proj 768 × 768 · E_lvl 3 × 768 · trained", "trained")]
     y = 24
     for i, (t, sub, k) in enumerate(left):
         s.box(10, y, 200, 38, t, sub, kind=k, size=10.5, sub_size=8.5)
@@ -149,15 +149,15 @@ def end_to_end():
 
     right = [("Question", '"Question: Is there tumour? Answer:"', "text"),
              ("Tokens + position embeddings", "T word pieces → T × 768", "frozen"),
-             ("GPT-2 blocks 1–3", None, "frozen"),
-             ("Zoom cross-attn 1 · reads regions", None, "zoom"),
-             ("GPT-2 blocks 4–6", None, "frozen"),
-             ("Zoom cross-attn 2 · reads sub-regions", None, "zoom"),
-             ("GPT-2 blocks 7–9", None, "frozen"),
-             ("Zoom cross-attn 3 · reads tiles", None, "zoom"),
-             ("GPT-2 blocks 10–12", None, "frozen"),
-             ("Zoom cross-attn 4 · reads tiles", None, "zoom"),
-             ("LayerNorm + LM head", "last row → 50,257 word scores → pick the top word", "frozen"),
+             ("GPT-2 blocks 1–3", "T × 768 → T × 768", "frozen"),
+             ("Zoom cross-attn 1 · reads regions", "Q T × 768 · K, V R × 768 · attention T × R", "zoom"),
+             ("GPT-2 blocks 4–6", "T × 768 → T × 768", "frozen"),
+             ("Zoom cross-attn 2 · reads sub-regions", "Q T × 768 · K, V S × 768 · prior + attention T × S", "zoom"),
+             ("GPT-2 blocks 7–9", "T × 768 → T × 768", "frozen"),
+             ("Zoom cross-attn 3 · reads tiles", "Q T × 768 · K, V N × 768 · prior + attention T × N", "zoom"),
+             ("GPT-2 blocks 10–12", "T × 768 → T × 768", "frozen"),
+             ("Zoom cross-attn 4 · reads tiles", "Q T × 768 · K, V N × 768 · prior + attention T × N", "zoom"),
+             ("LayerNorm + LM head", "T × 768 → T × 50,257 · last row → pick the top word", "frozen"),
              ("Answer, one word at a time", '"yes", then (end) → stop', "text")]
     ys, y = [], 24
     for i, (t, sub, k) in enumerate(right):
@@ -180,7 +180,7 @@ def end_to_end():
         s.path(f"M575,{ya} C598,{ya} 598,{yb} 577,{yb}")
     mid = (ys[3][0] + ys[9][0]) / 2 + 12
     s.raw(f'<text x="610" y="{mid}" font-size="8.5" fill="#4f35a8" font-weight="600" text-anchor="middle" '
-          f'transform="rotate(-90 610 {mid})">zoom prior: β · log a of the block above</text>')
+          f'transform="rotate(-90 610 {mid})">zoom prior: β · log a of the block above (T × coarse → T × fine)</text>')
     # generation loop
     last = ys[-1][0] + 12
     s.line([(575, last), (628, last), (628, ys[1][0] + 16), (577, ys[1][0] + 16)], dash="3 3")
@@ -266,9 +266,9 @@ def hierarchy_panel():
 # ---------------------------------------------------------------------------------------------- 4
 def prior_panel():
     s = Svg(640, 350)
-    s.box(10, 20, 140, 40, "Previous block's attention", "a_{l-1} · QT × N_coarse", kind="zoom", size=10, sub_size=8.5)
+    s.box(10, 20, 140, 40, "Previous block's attention", "a_{l-1} · T × N_coarse", kind="zoom", size=10, sub_size=8.5)
     s.box(180, 20, 110, 40, "Copy to children", "gather by ancestor", kind="plain", size=10, sub_size=8.5)
-    s.box(320, 20, 110, 40, "Prior", "QT × N_fine", kind="plain", size=10, sub_size=8.5)
+    s.box(320, 20, 110, 40, "Prior", "T × N_fine", kind="plain", size=10, sub_size=8.5)
     s.box(460, 20, 110, 40, "β_l · log(prior)", "β starts at 0", kind="zoom", size=10, sub_size=8.5)
     for x in (150, 290, 430):
         s.line([(x + 2, 40), (x + 28, 40)], color="purple")
@@ -280,7 +280,7 @@ def prior_panel():
     s.line([(110, 118), (138, 118)])
     s.line([(110, 198), (124, 198), (124, 180), (138, 180)])
     s.line([(124, 198), (124, 220), (138, 220)])
-    s.box(230, 130, 130, 40, "Scores", "q · kᵀ / √d · QT × N_fine", kind="plain", size=10, sub_size=8.5)
+    s.box(230, 130, 130, 40, "Scores", "q · kᵀ / √d · T × N_fine", kind="plain", size=10, sub_size=8.5)
     s.line([(190, 118), (210, 118), (210, 142), (228, 142)])
     s.line([(190, 180), (210, 180), (210, 158), (228, 158)])
     s.raw('<circle cx="515" cy="150" r="11" fill="#fff" stroke="#7c5cd6" stroke-width="1.4"/>')
@@ -402,7 +402,9 @@ from the tile positions saved with the features, so no new feature extraction is
         section("End to end", end_to_end() + """
 <p>The slide is turned into three memories once per question. The first cross-attention reads <b>regions</b>, the second
 <b>sub-regions</b>, the last two read <b>tiles</b>, so magnification follows GPT-2's depth. The <span class="new">purple</span>
-arrows are the zoom prior: what each word attended to in one block biases where it looks in the next.</p>"""),
+arrows are the zoom prior: what each word attended to in one block biases where it looks in the next.
+<br><b>Shapes:</b> T = word pieces in the prompt (~15), R = regions (~10–30), S = sub-regions (~100–300),
+N = tiles (~4,000); 768 = the width of every token, from Phikon and GPT-2 alike.</p>"""),
         section("Why β starts at 0", beta_panel() + """
 <p>Like the gate <code>g</code>, the zoom strength <code>β</code> is one learned number per layer that starts at 0. At
 the start the model is an ordinary multi-scale Flamingo model (baseline B2), so any zooming it does is learned because
